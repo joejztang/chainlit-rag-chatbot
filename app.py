@@ -23,7 +23,9 @@ PDF_STORAGE_PATH = "./pdfs"
 def process_pdfs(pdf_storage_path: str):
     pdf_directory = Path(pdf_storage_path)
     docs = []  # type: List[Document]
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size, chunk_overlap=chunk_overlap
+    )
 
     for pdf_path in pdf_directory.glob("*.pdf"):
         loader = PyMuPDFLoader(str(pdf_path))
@@ -52,7 +54,7 @@ def process_pdfs(pdf_storage_path: str):
 
 
 doc_search = process_pdfs(PDF_STORAGE_PATH)
-model = ChatOpenAI(model_name="gpt-4", streaming=True)
+model = ChatOpenAI(model_name="gpt-4o-mini", streaming=True)
 
 
 @cl.on_chat_start
