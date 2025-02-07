@@ -1,3 +1,8 @@
+# sqlite3 version bug https://github.com/chroma-core/chroma/issues/1985#issuecomment-2055963683
+__import__("pysqlite3")
+import sys
+sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+
 from pathlib import Path
 from typing import List
 
