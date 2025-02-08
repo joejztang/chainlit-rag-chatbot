@@ -1,6 +1,7 @@
 # sqlite3 version bug https://github.com/chroma-core/chroma/issues/1985#issuecomment-2055963683
 __import__("pysqlite3")
 import sys
+
 sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
 from pathlib import Path
@@ -91,6 +92,13 @@ async def on_chat_start():
 async def on_message(message: cl.Message):
     runnable = cl.user_session.get("runnable")  # type: Runnable
     msg = cl.Message(content="")
+
+    # TODO: how to handle doc upload
+    print(len(message.elements))
+    if message.elements:
+        await cl.Message(content=f"Received {message.elements[0]} image(s)").send()
+        await cl.Message(content=f"Received {len(message.elements)} doc(s)").send()
+        return
 
     class PostMessageHandler(BaseCallbackHandler):
         """
