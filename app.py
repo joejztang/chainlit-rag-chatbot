@@ -4,29 +4,37 @@ import sys
 
 sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
+import os
 from pathlib import Path
 from typing import List
 
 import chainlit as cl
+from dotenv import load_dotenv
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.indexes import SQLRecordManager, index
 from langchain.prompts import ChatPromptTemplate
+from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain.schema import Document, StrOutputParser
 from langchain.schema.runnable import Runnable, RunnableConfig, RunnablePassthrough
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores.chroma import Chroma
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_postgres import PGVector
+
+from utils.store import PostgresByteStore
 
 chunk_size = 1024
 chunk_overlap = 50
+
+load_dotenv()
 
 embeddings_model = OpenAIEmbeddings()
 
 PDF_STORAGE_PATH = "./pdfs"
 
 
-def process_pdfs(pdf_storage_path: str):
+def process_pdfs(pdf_storage_path: str, collection_name: str):
     pdf_directory = Path(pdf_storage_path)
     docs = []  # type: List[Document]
     text_splitter = RecursiveCharacterTextSplitter(
@@ -37,10 +45,18 @@ def process_pdfs(pdf_storage_path: str):
         loader = PyMuPDFLoader(str(pdf_path))
         documents = loader.load()
         docs += text_splitter.split_documents(documents)
+        for doc in docs:
+            doc.metadata["source"] = pdf_path.stem
 
-    doc_search = Chroma.from_documents(docs, embeddings_model)
+    doc_search = PGVector.from_documents(
+        docs,
+        embeddings_model,
+        collection_name=collection_name,
+        connection=os.getenv("POSTGRES_CONNECTION_STRING"),
+        use_jsonb=True,
+    )
 
-    namespace = "chromadb/my_documents"
+    namespace = "pgvector/my_documents"
     record_manager = SQLRecordManager(
         namespace, db_url="sqlite:///record_manager_cache.sql"
     )
@@ -50,16 +66,45 @@ def process_pdfs(pdf_storage_path: str):
         docs,
         record_manager,
         doc_search,
-        cleanup="incremental",
+        cleanup="full",
+        # TODO: source id key likely wrong so that error finding index
         source_id_key="source",
     )
-
     print(f"Indexing stats: {index_result}")
+
+    # store = PostgresByteStore(os.getenv("POSTGRES_CONNECTION_STRING"), collection_name)
+    # id_key = "doc_id"
+
+    # retriever = MultiVectorRetriever(
+    #     vectorstore=doc_search,
+    #     docstore=store,
+    #     id_key=id_key,
+    # )
 
     return doc_search
 
+    # doc_search = Chroma.from_documents(docs, embeddings_model)
 
-doc_search = process_pdfs(PDF_STORAGE_PATH)
+    # namespace = "chromadb/my_documents"
+    # record_manager = SQLRecordManager(
+    #     namespace, db_url="sqlite:///record_manager_cache.sql"
+    # )
+    # record_manager.create_schema()
+
+    # index_result = index(
+    #     docs,
+    #     record_manager,
+    #     vectorstore,
+    #     cleanup="incremental",
+    #     source_id_key="source",
+    # )
+
+    # print(f"Indexing stats: {index_result}")
+
+    # return vectorstore
+
+
+doc_search = process_pdfs(PDF_STORAGE_PATH, "my_documents")
 model = ChatOpenAI(model_name="gpt-4o-mini", streaming=True)
 
 
@@ -93,12 +138,12 @@ async def on_message(message: cl.Message):
     runnable = cl.user_session.get("runnable")  # type: Runnable
     msg = cl.Message(content="")
 
-    # TODO: how to handle doc upload
-    print(len(message.elements))
-    if message.elements:
-        await cl.Message(content=f"Received {message.elements[0]} image(s)").send()
-        await cl.Message(content=f"Received {len(message.elements)} doc(s)").send()
-        return
+    # # TODO: how to handle doc upload
+    # print(len(message.elements))
+    # if message.elements:
+    #     await cl.Message(content=f"Received {message.elements[0]} image(s)").send()
+    #     await cl.Message(content=f"Received {len(message.elements)} doc(s)").send()
+    #     return
 
     class PostMessageHandler(BaseCallbackHandler):
         """
@@ -125,7 +170,9 @@ async def on_message(message: cl.Message):
                     cl.Text(name="Sources", content=sources_text, display="inline")
                 )
 
-    async for chunk in runnable.astream(
+    # TODO: pgvector async stream available?
+    # async for chunk in runnable.astream(
+    for chunk in runnable.stream(
         message.content,
         config=RunnableConfig(
             callbacks=[cl.LangchainCallbackHandler(), PostMessageHandler(msg)]

@@ -30,7 +30,9 @@ class PostgresByteStore(BaseStore):
 
         # Engines for synchronous and asynchronous operations
         self.engine = create_engine(conninfo)
-        self.async_engine = create_async_engine(conninfo)
+        self.async_engine = create_async_engine(
+            conninfo.replace("postgresql+psycopg2://", "postgresql+asyncpg://")
+        )
 
         # Metadata setup
         Base.metadata.bind = self.engine

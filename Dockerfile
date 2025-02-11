@@ -54,13 +54,12 @@ ENV FASTAPI_ENV=development
 COPY --from=builder-base $POETRY_HOME $POETRY_HOME
 COPY --from=builder-base $PYSETUP_PATH $PYSETUP_PATH
 
-# # install some additional dev dependencies
+# install some additional dev dependencies
 # RUN buildDeps="build-essential" \
 #     && apt-get update \
 #     && apt-get install --no-install-recommends -y \
-#         curl \
-#         vim \
-#         netcat \
+#     libpq-dev \
+#     gcc \
 #     && apt-get install -y --no-install-recommends $buildDeps \
 #     && rm -rf /var/lib/apt/lists/*
 

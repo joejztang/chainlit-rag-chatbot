@@ -7,3 +7,19 @@ services:
     container_name: chainlit-qa-bot
     ports:
       - "7860:7860"
+    depends_on:
+      - pgvector
+  pgvector:
+    image: pgvector/pgvector:0.8.0-pg17
+    container_name: pgvector
+    volumes:
+      - vector-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=chat_db
+      - POSTGRES_USER=dev_user  # dev only
+      - POSTGRES_PASSWORD=1234  # dev only
+    ports:
+      - "5432:5432"
+
+volumes:
+  vector-data:
