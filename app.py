@@ -1,17 +1,19 @@
 # sqlite3 version bug https://github.com/chroma-core/chroma/issues/1985#issuecomment-2055963683
-__import__("pysqlite3")
-import sys
+# async pysqlite https://stackoverflow.com/a/71756224/4308025
+# __import__("aiosqlite")
+# import sys
 
-sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+# sys.modules["sqlite3"] = sys.modules.pop("aiosqlite")
 
 import os
 from pathlib import Path
 from typing import List
 
+import aiosqlite
 import chainlit as cl
 from dotenv import load_dotenv
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain.indexes import SQLRecordManager, index
+from langchain.indexes import SQLRecordManager, aindex, index
 from langchain.prompts import ChatPromptTemplate
 from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain.schema import Document, StrOutputParser
@@ -20,7 +22,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores.chroma import Chroma
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_postgres import PGVector
+from langchain_postgres.vectorstores import PGVector
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from utils.store import PostgresByteStore
 
@@ -34,7 +37,7 @@ embeddings_model = OpenAIEmbeddings()
 PDF_STORAGE_PATH = "./pdfs"
 
 
-def process_pdfs(pdf_storage_path: str, collection_name: str):
+async def process_pdfs(pdf_storage_path: str, collection_name: str):
     pdf_directory = Path(pdf_storage_path)
     docs = []  # type: List[Document]
     text_splitter = RecursiveCharacterTextSplitter(
@@ -48,21 +51,23 @@ def process_pdfs(pdf_storage_path: str, collection_name: str):
         for doc in docs:
             doc.metadata["source"] = pdf_path.stem
 
-    doc_search = PGVector.from_documents(
+    a_pgvector_engine = create_async_engine(os.getenv("POSTGRES_CONNECTION_STRING"))
+    doc_search = await PGVector.afrom_documents(
         docs,
         embeddings_model,
         collection_name=collection_name,
-        connection=os.getenv("POSTGRES_CONNECTION_STRING"),
+        connection=a_pgvector_engine,
         use_jsonb=True,
     )
 
     namespace = "pgvector/my_documents"
-    record_manager = SQLRecordManager(
-        namespace, db_url="sqlite:///record_manager_cache.sql"
+    a_record_engine = create_async_engine(
+        "sqlite+aiosqlite:///record_manager_cache.sql"
     )
-    record_manager.create_schema()
+    record_manager = SQLRecordManager(namespace, engine=a_record_engine)
+    await record_manager.acreate_schema()
 
-    index_result = index(
+    index_result = await aindex(
         docs,
         record_manager,
         doc_search,
@@ -104,12 +109,13 @@ def process_pdfs(pdf_storage_path: str, collection_name: str):
     # return vectorstore
 
 
-doc_search = process_pdfs(PDF_STORAGE_PATH, "my_documents")
 model = ChatOpenAI(model_name="gpt-4o-mini", streaming=True)
 
 
 @cl.on_chat_start
 async def on_chat_start():
+    doc_search = await process_pdfs(PDF_STORAGE_PATH, "my_documents")
+
     template = """Answer the question based only on the following context:
 
     {context}
@@ -172,7 +178,7 @@ async def on_message(message: cl.Message):
 
     # TODO: pgvector async stream available?
     # async for chunk in runnable.astream(
-    for chunk in runnable.stream(
+    async for chunk in runnable.astream(
         message.content,
         config=RunnableConfig(
             callbacks=[cl.LangchainCallbackHandler(), PostMessageHandler(msg)]
