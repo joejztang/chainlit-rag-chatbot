@@ -78,7 +78,7 @@ COPY . .
 EXPOSE 7860
 # ENTRYPOINT /docker-entrypoint.sh $0 $@
 # CMD ["uvicorn", "--reload", "--host=0.0.0.0", "--port=8000", "main:app"]
-CMD ["chainlit", "run", "app.py", "--host", "0.0.0.0", "--port", "7860", "-h"]
+CMD ["chainlit", "run", "cl_app.py", "--host", "0.0.0.0", "--port", "7860", "-h"]
 
 
 # # 'lint' stage runs black and isort
