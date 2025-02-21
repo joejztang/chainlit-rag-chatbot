@@ -6,14 +6,17 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.schema import StrOutputParser
 from langchain.schema.runnable import Runnable, RunnableConfig, RunnablePassthrough
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from snowflake import SnowflakeGenerator
 
 from utils.handler import PostMessageHandler
 from utils.processor import process_pdfs
 from utils.util import save_file_to_disk
 
 load_dotenv()
+MACHINE_ID = os.getenv("MACHINE_ID", 1)
 PDF_STORAGE_PATH = "./pdfs"
 
+sfgen = SnowflakeGenerator(MACHINE_ID)
 embeddings_model = OpenAIEmbeddings()
 model = ChatOpenAI(model_name="gpt-4o-mini", streaming=True)
 # doc_search = asyncio.run(
@@ -23,7 +26,7 @@ model = ChatOpenAI(model_name="gpt-4o-mini", streaming=True)
 
 @cl.on_chat_start
 async def on_chat_start():
-
+    """Set the prompt for the user."""
     template = """Answer the question based only on the following context:
 
     {context}
@@ -31,11 +34,19 @@ async def on_chat_start():
     Question: {question}
     """
     prompt = ChatPromptTemplate.from_template(template)
+    sid = next(sfgen)
     cl.user_session.set("prompt", prompt)
+    cl.user_session.set("sid", sid)
 
 
 @cl.on_message
 async def on_message(message: cl.Message):
+    """Logic for handling the user's message.
+
+    Args:
+        message (cl.Message): Response to the user's message.
+    """
+
     def format_docs(docs):
         return "\n\n".join([d.page_content for d in docs])
 
@@ -71,16 +82,8 @@ async def on_message(message: cl.Message):
         await msg.send()
     else:
         await cl.Message("no file uploaded").send()
-    # return
-    # runnable = cl.user_session.get("runnable")  # type: Runnable
-    # msg = cl.Message(content="")
 
-    # async for chunk in runnable.astream(
-    #     message.content,
-    #     config=RunnableConfig(
-    #         callbacks=[cl.LangchainCallbackHandler(), PostMessageHandler(msg)]
-    #     ),
-    # ):
-    #     await msg.stream_token(chunk)
 
-    # await msg.send()
+@cl.on_chat_end
+def on_chat_end():
+    print("The user disconnected!")

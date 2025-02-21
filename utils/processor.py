@@ -28,11 +28,11 @@ async def process_pdfs(
         loader = PyMuPDFLoader(str(pdf_path))
         documents = loader.load()
         docs += text_splitter.split_documents(documents)
+        # "source" will be used as group_id in upsertion_record table
         for doc in docs:
-            doc.metadata["source"] = pdf_path.stem
+            doc.metadata["source"] = sid
 
-    doc_search = await PGVector.afrom_documents(
-        docs,
+    doc_search = PGVector(
         embeddings_model,
         collection_name=collection_name,
         connection=a_pgvector_engine,
@@ -41,14 +41,12 @@ async def process_pdfs(
 
     namespace = "pgvector/my_documents"
     record_manager = LocalRecordManager(namespace)
-    # record_manager = SQLRecordManager(namespace, engine=a_record_engine)
-    # await record_manager.acreate_schema()
 
     index_result = await aindex(
         docs,
         record_manager,
         doc_search,
-        cleanup="full",
+        cleanup="incremental",
         source_id_key="source",
     )
     print(f"Indexing stats: {index_result}")
