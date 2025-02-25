@@ -33,21 +33,6 @@ async def process_pdfs(
         for doc in docs:
             doc.metadata["source"] = os.path.join(uid, element.name)
 
-    # for pdf_path in pdf_directory.glob("*.pdf"):
-    #     loader = PyMuPDFLoader(str(pdf_path))
-    #     documents = loader.load()
-    #     docs += text_splitter.split_documents(documents)
-    #     # "source" will be used as group_id in upsertion_record table
-    #     for doc in docs:
-    #         doc.metadata["source"] = os.path.join(uid, pdf_path.name)
-
-    # doc_search = PGVector(
-    #     embeddings_model,
-    #     collection_name=collection_name,
-    #     connection=a_pgvector_engine,
-    #     use_jsonb=True,
-    # )
-
     record_manager = LocalRecordManager(uid)
 
     index_result = await aindex(
@@ -58,3 +43,13 @@ async def process_pdfs(
         source_id_key="source",
     )
     print(f"Indexing stats: {index_result}")
+
+
+async def _cleanup(uid: str, vectordb: PGVector):
+    record_manager = LocalRecordManager(uid)
+    await aindex(
+        [],
+        record_manager,
+        vectordb,
+        cleanup="full",
+    )

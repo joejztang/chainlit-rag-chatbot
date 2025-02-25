@@ -10,7 +10,7 @@ from langchain_postgres.vectorstores import PGVector
 
 from utils.db import a_pgvector_engine
 from utils.handler import PostMessageHandler
-from utils.processor import process_pdfs
+from utils.processor import _cleanup, process_pdfs
 from utils.util import save_file_to_disk
 
 load_dotenv()
@@ -19,11 +19,12 @@ PDF_STORAGE_PATH = "./pdfs"
 
 embeddings_model = OpenAIEmbeddings()
 model = ChatOpenAI(model_name="gpt-4o-mini", streaming=True)
+vectordb = PGVector(embeddings=embeddings_model, connection=a_pgvector_engine)
 
 
 @cl.on_chat_start
 async def on_chat_start():
-    """Set the prompt for the user."""
+    """Prepare for chat."""
     template = """Quesition: {question}"""
     prompt = ChatPromptTemplate.from_template(template)
     cl.user_session.set("prompt", prompt)
@@ -36,6 +37,15 @@ async def on_chat_start():
     """
     file_prompt = ChatPromptTemplate.from_template(file_template)
     cl.user_session.set("file_prompt", file_prompt)
+
+    vectordb = PGVector(
+        embeddings_model,
+        collection_name=f"{USER_ID}/{cl.user_session.get("id")}",
+        connection=a_pgvector_engine,
+        use_jsonb=True,
+    )
+    await vectordb.__apost_init__()
+    cl.user_session.set("vectordb", vectordb)
 
     cl.user_session.set("uid", USER_ID)
 
@@ -69,20 +79,14 @@ async def on_message(message: cl.Message):
             collections.add(os.path.join(uid, element.name))
         cl.user_session.set("collections", collections)
 
-        doc_search = PGVector(
-            embeddings_model,
-            collection_name=f"{uid}/{cl.user_session.get("id")}",
-            connection=a_pgvector_engine,
-            use_jsonb=True,
-        )
-
+        vectordb = cl.user_session.get("vectordb")
         await process_pdfs(
             uid,
             message.elements,
-            doc_search,
+            vectordb,
         )
 
-        retriever = doc_search.as_retriever()
+        retriever = vectordb.as_retriever()
         runnable = (
             {"context": retriever | format_docs, "question": RunnablePassthrough()}
             | file_prompt
@@ -104,4 +108,7 @@ async def on_message(message: cl.Message):
 @cl.on_chat_end
 async def on_chat_end():
     """Delete the index and vectors."""
+    uid = cl.user_session.get("uid")
+    vectordb = cl.user_session.get("vectordb")
+    await _cleanup(uid, vectordb)
     print("Done deleting index and vectors.")
