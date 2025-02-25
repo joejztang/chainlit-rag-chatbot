@@ -8,7 +8,7 @@ from langchain.schema.runnable import Runnable, RunnableConfig, RunnablePassthro
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_postgres.vectorstores import PGVector
 
-from utils.db import a_pgvector_engine
+from utils.db import LocalRecordManager, a_pgvector_engine
 from utils.handler import PostMessageHandler
 from utils.processor import _cleanup, process_pdfs
 from utils.util import save_file_to_disk
@@ -47,6 +47,9 @@ async def on_chat_start():
     await vectordb.__apost_init__()
     cl.user_session.set("vectordb", vectordb)
 
+    recordmanager = LocalRecordManager(f"{USER_ID}/{cl.user_session.get("id")}")
+    cl.user_session.set("recordmanager", recordmanager)
+
     cl.user_session.set("uid", USER_ID)
 
 
@@ -80,11 +83,8 @@ async def on_message(message: cl.Message):
         cl.user_session.set("collections", collections)
 
         vectordb = cl.user_session.get("vectordb")
-        await process_pdfs(
-            uid,
-            message.elements,
-            vectordb,
-        )
+        recordmanager = cl.user_session.get("recordmanager")
+        await process_pdfs(uid, message.elements, vectordb, recordmanager)
 
         retriever = vectordb.as_retriever()
         runnable = (
@@ -110,5 +110,6 @@ async def on_chat_end():
     """Delete the index and vectors."""
     uid = cl.user_session.get("uid")
     vectordb = cl.user_session.get("vectordb")
-    await _cleanup(uid, vectordb)
+    recordmanager = cl.user_session.get("recordmanager")
+    await _cleanup(uid, vectordb, recordmanager)
     print("Done deleting index and vectors.")

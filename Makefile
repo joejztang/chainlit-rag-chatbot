@@ -14,8 +14,7 @@
 # Clean build artifacts
 deepclean:
 	docker-compose down --volumes --remove-orphans
-	-docker rmi $(docker images --filter "dangling=true" -q --no-trunc)
-	-sudo rm local-db/record_manager_cache.sql
+	-docker rmi $$(docker images --filter "dangling=true" -q --no-trunc)
 
 # # Run the application
 # run:

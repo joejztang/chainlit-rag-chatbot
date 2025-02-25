@@ -18,7 +18,8 @@ async def process_pdfs(
     uid: str,
     pdfs: List[Any],
     vectordb: Any,
-) -> PGVector:
+    recordmanger: Any,
+) -> None:
     # pdf_directory = Path(pdf_storage_path)
     docs = []  # type: List[Document]
     text_splitter = RecursiveCharacterTextSplitter(
@@ -33,11 +34,11 @@ async def process_pdfs(
         for doc in docs:
             doc.metadata["source"] = os.path.join(uid, element.name)
 
-    record_manager = LocalRecordManager(uid)
+    # record_manager = LocalRecordManager(uid)
 
     index_result = await aindex(
         docs,
-        record_manager,
+        recordmanger,
         vectordb,
         cleanup="incremental",
         source_id_key="source",
@@ -45,11 +46,12 @@ async def process_pdfs(
     print(f"Indexing stats: {index_result}")
 
 
-async def _cleanup(uid: str, vectordb: PGVector):
-    record_manager = LocalRecordManager(uid)
+async def _cleanup(
+    uid: str, vectordb: PGVector, recordmanager: LocalRecordManager
+) -> None:
     await aindex(
         [],
-        record_manager,
+        recordmanager,
         vectordb,
         cleanup="full",
     )

@@ -4,10 +4,8 @@ import os
 from langchain.indexes import SQLRecordManager
 from sqlalchemy.ext.asyncio import create_async_engine
 
-a_pgvector_engine = create_async_engine(os.getenv("POSTGRES_CONNECTION_STRING"))
-a_record_engine = create_async_engine(
-    "sqlite+aiosqlite:///local-db/record_manager_cache.sql"
-)
+a_pgvector_engine = create_async_engine(os.getenv("PGVECTOR_CONNECTION_STRING"))
+a_record_engine = create_async_engine(os.getenv("RECORDMANAGER_CONNECTION_STRING"))
 
 
 class LocalRecordManager:
