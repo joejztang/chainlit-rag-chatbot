@@ -15,7 +15,11 @@ EOSQL
 if [ -n "$POSTGRES_MULTIPLE_DATABASES" ]; then
 	echo "Multiple database creation requested: $POSTGRES_MULTIPLE_DATABASES"
 	for db in $(echo $POSTGRES_MULTIPLE_DATABASES | tr ',' ' '); do
-		create_user_and_database $db
+		if psql -lqt -U "$POSTGRES_USER" | cut -d \| -f 1 | grep -qw "$db"; then
+			echo "  Database '$db' already exists, skipping..."
+		else
+			create_user_and_database $db
+		fi
 	done
 	echo "Multiple databases created"
 fi

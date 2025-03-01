@@ -8,18 +8,17 @@ from langchain.schema.runnable import Runnable, RunnableConfig, RunnablePassthro
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_postgres.vectorstores import PGVector
 
+from graphs.singlenode import SingleNodeGraph
 from utils.db import LocalRecordManager, a_pgvector_engine
 from utils.handler import PostMessageHandler
 from utils.processor import _cleanup, process_pdfs
-from utils.util import save_file_to_disk
 
 load_dotenv()
 USER_ID = os.getenv("USER_ID", "test")
-PDF_STORAGE_PATH = "./pdfs"
 
 embeddings_model = OpenAIEmbeddings()
 model = ChatOpenAI(model_name="gpt-4o-mini", streaming=True)
-vectordb = PGVector(embeddings=embeddings_model, connection=a_pgvector_engine)
+# vectordb = PGVector(embeddings=embeddings_model, connection=a_pgvector_engine)
 
 
 @cl.on_chat_start
@@ -74,14 +73,6 @@ async def on_message(message: cl.Message):
     if message.elements:
         print(message.elements)
 
-        collections = set()
-        for element in message.elements:
-            await cl.make_async(save_file_to_disk)(
-                element.path, os.path.join(PDF_STORAGE_PATH, element.name)
-            )
-            collections.add(os.path.join(uid, element.name))
-        cl.user_session.set("collections", collections)
-
         vectordb = cl.user_session.get("vectordb")
         recordmanager = cl.user_session.get("recordmanager")
         await process_pdfs(uid, message.elements, vectordb, recordmanager)
@@ -94,11 +85,15 @@ async def on_message(message: cl.Message):
             | StrOutputParser()
         )
 
-    async for chunk in runnable.astream(
-        message.content,
+    graph = SingleNodeGraph(chain=runnable, mem=True).get_graph()
+
+    async for chunk in graph.astream(
+        {"question": message.content},
         config=RunnableConfig(
-            callbacks=[cl.LangchainCallbackHandler(), PostMessageHandler(msg)]
+            callbacks=[cl.LangchainCallbackHandler(), PostMessageHandler(msg)],
+            configurable=dict(thread_id=cl.user_session.get("id")),
         ),
+        stream_mode="messages",
     ):
         await msg.stream_token(chunk)
 

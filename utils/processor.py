@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 from typing import Any, List
 
 from langchain.indexes import aindex
@@ -55,3 +54,4 @@ async def _cleanup(
         vectordb,
         cleanup="full",
     )
+    # files uploaded will be deleted after each session

@@ -20,7 +20,11 @@ class LocalRecordManager:
     def __new__(cls, namespace: str) -> SQLRecordManager:
         if cls._instance.get(namespace, None) is None:
             sqlRecordManager = SQLRecordManager(namespace, engine=a_record_engine)
-            asyncio.run(sqlRecordManager.acreate_schema())
+            try:
+                asyncio.run(sqlRecordManager.acreate_schema())
+            except Exception as e:
+                # schema already exists, avoid crashing.
+                print(f"failed to create schema, schema exists.\n{e}")
             cls._instance[namespace] = sqlRecordManager
 
         return cls._instance[namespace]
