@@ -1,4 +1,5 @@
 import os
+from operator import itemgetter
 
 import chainlit as cl
 from dotenv import load_dotenv
@@ -69,7 +70,7 @@ async def on_message(message: cl.Message):
 
     msg = cl.Message(content="")
 
-    runnable = {"question": RunnablePassthrough()} | prompt | model | StrOutputParser()
+    chain = {"question": RunnablePassthrough()} | prompt | model | StrOutputParser()
     if message.elements:
         print(message.elements)
 
@@ -78,24 +79,34 @@ async def on_message(message: cl.Message):
         await process_pdfs(uid, message.elements, vectordb, recordmanager)
 
         retriever = vectordb.as_retriever()
-        runnable = (
+        chain = (
             {"context": retriever | format_docs, "question": RunnablePassthrough()}
             | file_prompt
             | model
             | StrOutputParser()
         )
 
-    graph = SingleNodeGraph(chain=runnable, mem=True).get_graph()
+    # TODO: currently only support one pdf chatting with memory. supprot multiple pdfs later.
+    if not cl.user_session.get("graph"):
+        graph = SingleNodeGraph(chain=chain, mem=True).get_graph()
+        cl.user_session.set("graph", graph)
+    graph = cl.user_session.get("graph")
+    # print(chain.input_schema.model_json_schema())
 
     async for chunk in graph.astream(
-        {"question": message.content},
+        # message.content,
+        {"messages": [{"role": "user", "content": message.content}]},
         config=RunnableConfig(
             callbacks=[cl.LangchainCallbackHandler(), PostMessageHandler(msg)],
             configurable=dict(thread_id=cl.user_session.get("id")),
         ),
-        stream_mode="messages",
+        # stream_mode="messages",
     ):
-        await msg.stream_token(chunk)
+        # print(chunk)
+        # print(chunk["chain"]["messages"][-1]["content"])
+        # tok = chunk["chain"]["messages"][-1].content
+        # print(tok)
+        await msg.stream_token(chunk["chain"]["messages"][-1]["content"])
 
     await msg.send()
 

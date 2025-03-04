@@ -6,6 +6,9 @@ from langchain.schema.runnable import RunnableSerializable
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, Graph, MessagesState, StateGraph
 
+# TODO: fix relative import issue
+from models.model import SimpleState
+
 from .basegraph import BaseGraph
 
 
@@ -17,9 +20,10 @@ class SingleNodeGraph(BaseGraph):
         self.mem = mem
         self.chain = chain
 
-    async def a_call_chain(self, state: str):
+    async def a_call_chain(self, state: MessagesState):
         """Call the chain."""
-        return await self.chain.ainvoke(state)
+        ret = await self.chain.ainvoke(state["messages"][-1].content)
+        return {"messages": [{"role": "assistant", "content": ret}]}
 
     def build(self):
         """Build the graph."""
