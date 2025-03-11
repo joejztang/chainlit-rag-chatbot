@@ -6,10 +6,9 @@ from langchain.schema.runnable import RunnableSerializable
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, Graph, MessagesState, StateGraph
 
-# TODO: fix relative import issue
-from models.model import SimpleState
-
 from .basegraph import BaseGraph
+
+# TODO: fix relative import issue
 
 
 class SingleNodeGraph(BaseGraph):

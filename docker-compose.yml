@@ -13,6 +13,7 @@ services:
       - ./local-db:/app/local-db
     depends_on:
       - pgvector
+    command: ["chainlit", "run", "cl_chain_app.py", "--host", "0.0.0.0", "--port", "7860", "-h"]
   # chainlit-qa-bot1:
   #   build:
   #     context: .
