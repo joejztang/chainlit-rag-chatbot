@@ -3,10 +3,10 @@ from functools import partial
 from operator import itemgetter
 
 import chainlit as cl
+from chainlit.input_widget import Switch
 from dotenv import load_dotenv
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema import StrOutputParser
-from langchain.schema.runnable import Runnable, RunnableConfig, RunnablePassthrough
+from langchain.schema.runnable import RunnableConfig, RunnablePassthrough
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_postgres.vectorstores import PGVector
@@ -27,30 +27,6 @@ model = ChatOpenAI(model_name="gpt-4o-mini", streaming=True)
 @cl.on_chat_start
 async def on_chat_start():
     """Prepare for chat."""
-    # template = """Quesition: {question}"""
-    # prompt = ChatPromptTemplate.from_template(template)
-    # cl.user_session.set("prompt", prompt)
-
-    # file_template = """Answer the question based only on the following context:
-
-    # {context}
-
-    # Question: {question}
-    # """
-    # file_prompt = ChatPromptTemplate.from_template(file_template)
-    # cl.user_session.set("file_prompt", file_prompt)
-
-    # history_prompt = ChatPromptTemplate.from_messages(
-    #     [
-    #         (
-    #             "system",
-    #             "Answer the question based only on the following context:\n{context}\n",
-    #         ),
-    #         MessagesPlaceholder(variable_name="history"),
-    #         ("human", "{question}"),
-    #     ]
-    # )
-
     vectordb = PGVector(
         embeddings_model,
         collection_name=f"{USER_ID}/{cl.user_session.get("id")}",
@@ -65,6 +41,11 @@ async def on_chat_start():
 
     cl.user_session.set("uid", USER_ID)
     cl.user_session.set("store", {})
+    settings = await cl.ChatSettings(
+        [
+            Switch(id="Streaming", label="OpenAI - Stream Tokens", initial=True),
+        ]
+    ).send()
 
 
 @cl.on_message
@@ -88,22 +69,16 @@ async def on_message(message: cl.Message):
         {"question": RunnablePassthrough()} | simple_prompt | model | StrOutputParser()
     )
     if message.elements:
-        print(message.elements)
 
         vectordb = cl.user_session.get("vectordb")
         recordmanager = cl.user_session.get("recordmanager")
+
         await process_pdfs(uid, message.elements, vectordb, recordmanager)
 
         retriever = vectordb.as_retriever()
         context = itemgetter("question") | retriever | format_docs
         first_step = RunnablePassthrough.assign(context=context)
-        chain = (
-            # {"context": retriever | format_docs, "question": RunnablePassthrough()}
-            first_step
-            | file_with_history_prompt
-            | model
-            | StrOutputParser()
-        )
+        chain = first_step | file_with_history_prompt | model | StrOutputParser()
 
     chain_with_history = RunnableWithMessageHistory(
         chain,

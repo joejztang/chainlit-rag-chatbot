@@ -176,3 +176,4 @@ cython_debug/
 # customs
 .chainlit/
 record_manager_cache.sql
+.files/
