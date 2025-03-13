@@ -43,9 +43,19 @@ async def on_chat_start():
     cl.user_session.set("store", {})
     settings = await cl.ChatSettings(
         [
-            Switch(id="Streaming", label="OpenAI - Stream Tokens", initial=True),
+            Switch(
+                id="sticky_rag",
+                label="Chat about documents within the whole session",
+                initial=False,
+            ),
         ]
     ).send()
+    cl.user_session.set("settings", settings)
+
+
+@cl.on_settings_update
+async def setup_agent(settings):
+    print("on_settings_update", settings)
 
 
 @cl.on_message
@@ -68,12 +78,13 @@ async def on_message(message: cl.Message):
     chain = (
         {"question": RunnablePassthrough()} | simple_prompt | model | StrOutputParser()
     )
-    if message.elements:
+    if message.elements or cl.user_session.get("settings").get("sticky_rag"):
 
         vectordb = cl.user_session.get("vectordb")
         recordmanager = cl.user_session.get("recordmanager")
 
-        await process_pdfs(uid, message.elements, vectordb, recordmanager)
+        if message.elements:
+            await process_pdfs(uid, message.elements, vectordb, recordmanager)
 
         retriever = vectordb.as_retriever()
         context = itemgetter("question") | retriever | format_docs
