@@ -15,6 +15,7 @@ class SingleNodeGraph(BaseGraph):
     """Single Node Graph."""
 
     def __init__(self, chain: Optional[RunnableSerializable] = None, mem: bool = False):
+        # stategraph input and output schema have to be the same.
         self.graph = StateGraph(MessagesState)
         self.mem = mem
         self.chain = chain
